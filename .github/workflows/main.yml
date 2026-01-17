@@ -41,14 +41,29 @@ jobs:
 
       - name: Configure Tailscale
         run: |
+          # Find Tailscale binaries location
+          TAILSCALE_PATH=$(find /Applications /usr/local -name "tailscale" -type f 2>/dev/null | head -1)
+          TAILSCALED_PATH=$(find /Applications /usr/local -name "tailscaled" -type f 2>/dev/null | head -1)
+          
+          # If not found, check common locations
+          if [ -z "$TAILSCALE_PATH" ]; then
+            TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+          fi
+          if [ -z "$TAILSCALED_PATH" ]; then
+            TAILSCALED_PATH="/Applications/Tailscale.app/Contents/MacOS/tailscaled"
+          fi
+          
+          echo "Tailscale binary: $TAILSCALE_PATH"
+          echo "Tailscaled binary: $TAILSCALED_PATH"
+          
           # Start Tailscale service
-          sudo tailscaled &
+          sudo "$TAILSCALED_PATH" &
           
           # Wait for daemon to start
-          sleep 5
+          sleep 10
           
           # Connect to Tailscale network
-          echo "${{ inputs.tailscale_auth_key }}" | sudo tailscale up \
+          echo "${{ inputs.tailscale_auth_key }}" | sudo "$TAILSCALE_PATH" up \
             --auth-key="$(cat)" \
             --hostname="github-actions-mac-${GITHUB_RUN_ID}" \
             --advertise-tags="${{ inputs.tailscale_tags }}" \
@@ -84,20 +99,27 @@ jobs:
 
       - name: Display Connection Info
         run: |
+          # Use the full path to tailscale binary
+          TAILSCALE_PATH=$(find /Applications /usr/local -name "tailscale" -type f 2>/dev/null | head -1)
+          if [ -z "$TAILSCALE_PATH" ]; then
+            TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+          fi
+          
           echo "=== Tailscale RDP Setup Complete ==="
           echo "Machine hostname: github-actions-mac-${GITHUB_RUN_ID}"
           echo ""
           echo "Tailscale IP addresses:"
-          tailscale ip -4
-          tailscale ip -6
+          "$TAILSCALE_PATH" ip -4
+          "$TAILSCALE_PATH" ip -6
           echo ""
           echo "To connect via VNC:"
           echo "1. Install a VNC client (RealVNC, TightVNC, etc.)"
           echo "2. Connect to the Tailscale IP shown above"
           echo "3. Use password: githubactions123"
           echo ""
+          TAILSCALE_IP=$("$TAILSCALE_PATH" ip -4)
           echo "To connect via SSH:"
-          echo "ssh $(whoami)@$(tailscale ip -4)"
+          echo "ssh $(whoami)@$TAILSCALE_IP"
           echo ""
           echo "Note: This runner will be available until the job completes."
           echo "The workflow will timeout after 6 hours by default."
