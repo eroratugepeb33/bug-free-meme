@@ -31,30 +31,72 @@ jobs:
           curl -L -o tailscale.pkg https://pkgs.tailscale.com/stable/Tailscale-latest-macos.pkg
           
           # Install the package
+          echo "Installing Tailscale package..."
           sudo installer -pkg tailscale.pkg -target /
           
           # Clean up
           rm tailscale.pkg
           
+          # Check what was installed
+          echo "Checking installation..."
+          ls -la /Applications/ | grep -i tailscale || echo "No Tailscale app in /Applications"
+          find /usr/local -name "*tailscale*" 2>/dev/null || echo "No Tailscale in /usr/local"
+          find /opt -name "*tailscale*" 2>/dev/null || echo "No Tailscale in /opt"
+          which tailscale 2>/dev/null || echo "tailscale not in PATH"
+          
           # Wait for installation to complete
-          sleep 10
+          sleep 15
 
       - name: Configure Tailscale
         run: |
-          # Find Tailscale binaries location
-          TAILSCALE_PATH=$(find /Applications /usr/local -name "tailscale" -type f 2>/dev/null | head -1)
-          TAILSCALED_PATH=$(find /Applications /usr/local -name "tailscaled" -type f 2>/dev/null | head -1)
+          echo "Searching for Tailscale binaries..."
           
-          # If not found, check common locations
+          # Search in multiple locations
+          TAILSCALE_PATH=$(find /Applications /usr/local /opt -name "tailscale" -type f 2>/dev/null | head -1)
+          TAILSCALED_PATH=$(find /Applications /usr/local /opt -name "tailscaled" -type f 2>/dev/null | head -1)
+          
+          # Check standard locations if not found
           if [ -z "$TAILSCALE_PATH" ]; then
-            TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-          fi
-          if [ -z "$TAILSCALED_PATH" ]; then
-            TAILSCALED_PATH="/Applications/Tailscale.app/Contents/MacOS/tailscaled"
+            for path in \
+              "/Applications/Tailscale.app/Contents/MacOS/Tailscale" \
+              "/usr/local/bin/tailscale" \
+              "/opt/homebrew/bin/tailscale" \
+              "/usr/bin/tailscale"; do
+              if [ -f "$path" ]; then
+                TAILSCALE_PATH="$path"
+                break
+              fi
+            done
           fi
           
-          echo "Tailscale binary: $TAILSCALE_PATH"
-          echo "Tailscaled binary: $TAILSCALED_PATH"
+          if [ -z "$TAILSCALED_PATH" ]; then
+            for path in \
+              "/Applications/Tailscale.app/Contents/MacOS/tailscaled" \
+              "/usr/local/bin/tailscaled" \
+              "/opt/homebrew/bin/tailscaled" \
+              "/usr/sbin/tailscaled"; do
+              if [ -f "$path" ]; then
+                TAILSCALED_PATH="$path"
+                break
+              fi
+            done
+          fi
+          
+          echo "Found Tailscale binary: $TAILSCALE_PATH"
+          echo "Found Tailscaled binary: $TAILSCALED_PATH"
+          
+          # Verify binaries exist
+          if [ ! -f "$TAILSCALE_PATH" ]; then
+            echo "ERROR: Tailscale binary not found at $TAILSCALE_PATH"
+            exit 1
+          fi
+          
+          if [ ! -f "$TAILSCALED_PATH" ]; then
+            echo "ERROR: Tailscaled binary not found at $TAILSCALED_PATH"
+            exit 1
+          fi
+          
+          echo "Binaries verified successfully"
           
           # Start Tailscale service
           sudo "$TAILSCALED_PATH" &
