@@ -25,78 +25,57 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Tailscale
+      - name: Install Tailscale via Homebrew Cask
         run: |
-          # Download the official Tailscale package
-          curl -L -o tailscale.pkg https://pkgs.tailscale.com/stable/Tailscale-latest-macos.pkg
+          # Since the .pkg redirects to Homebrew Cask, install directly via brew
+          echo "Installing Tailscale via Homebrew Cask..."
+          brew install --cask tailscale
           
-          # Install the package
-          echo "Installing Tailscale package..."
-          sudo installer -pkg tailscale.pkg -target /
-          
-          # Clean up
-          rm tailscale.pkg
-          
-          # Check what was installed
+          # Check installation
           echo "Checking installation..."
-          ls -la /Applications/ | grep -i tailscale || echo "No Tailscale app in /Applications"
-          find /usr/local -name "*tailscale*" 2>/dev/null || echo "No Tailscale in /usr/local"
-          find /opt -name "*tailscale*" 2>/dev/null || echo "No Tailscale in /opt"
-          which tailscale 2>/dev/null || echo "tailscale not in PATH"
+          brew list --cask tailscale
+          ls -la /Applications/ | grep -i tailscale
+          
+          # Verify binaries are accessible and show full paths
+          echo "Tailscale binary location:"
+          which tailscale
+          echo "Tailscaled binary location:"
+          which tailscaled
+          
+          # Also check common installation paths
+          ls -la /opt/homebrew/bin/tailscale* 2>/dev/null || echo "Not in /opt/homebrew/bin"
+          ls -la /usr/local/bin/tailscale* 2>/dev/null || echo "Not in /usr/local/bin"
+          
+          # Export PATH for subsequent steps
+          echo "export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"" >> $GITHUB_ENV
           
           # Wait for installation to complete
-          sleep 15
+          sleep 10
 
       - name: Configure Tailscale
         run: |
-          echo "Searching for Tailscale binaries..."
+          # Set the correct paths for Tailscale app bundle
+          TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+          TAILSCALED_PATH="/Applications/Tailscale.app/Contents/MacOS/tailscaled"
           
-          # Search in multiple locations
-          TAILSCALE_PATH=$(find /Applications /usr/local /opt -name "tailscale" -type f 2>/dev/null | head -1)
-          TAILSCALED_PATH=$(find /Applications /usr/local /opt -name "tailscaled" -type f 2>/dev/null | head -1)
+          echo "Using Tailscale app bundle paths:"
+          echo "Tailscale: $TAILSCALE_PATH"
+          echo "Tailscaled: $TAILSCALED_PATH"
           
-          # Check standard locations if not found
-          if [ -z "$TAILSCALE_PATH" ]; then
-            for path in \
-              "/Applications/Tailscale.app/Contents/MacOS/Tailscale" \
-              "/usr/local/bin/tailscale" \
-              "/opt/homebrew/bin/tailscale" \
-              "/usr/bin/tailscale"; do
-              if [ -f "$path" ]; then
-                TAILSCALE_PATH="$path"
-                break
-              fi
-            done
-          fi
-          
-          if [ -z "$TAILSCALED_PATH" ]; then
-            for path in \
-              "/Applications/Tailscale.app/Contents/MacOS/tailscaled" \
-              "/usr/local/bin/tailscaled" \
-              "/opt/homebrew/bin/tailscaled" \
-              "/usr/sbin/tailscaled"; do
-              if [ -f "$path" ]; then
-                TAILSCALED_PATH="$path"
-                break
-              fi
-            done
-          fi
-          
-          echo "Found Tailscale binary: $TAILSCALE_PATH"
-          echo "Found Tailscaled binary: $TAILSCALED_PATH"
-          
-          # Verify binaries exist
+          # Verify the binaries exist
           if [ ! -f "$TAILSCALE_PATH" ]; then
             echo "ERROR: Tailscale binary not found at $TAILSCALE_PATH"
+            ls -la "/Applications/Tailscale.app/Contents/MacOS/" 2>/dev/null || echo "Tailscale app directory not found"
             exit 1
           fi
           
           if [ ! -f "$TAILSCALED_PATH" ]; then
             echo "ERROR: Tailscaled binary not found at $TAILSCALED_PATH"
+            ls -la "/Applications/Tailscale.app/Contents/MacOS/" 2>/dev/null || echo "Tailscale app directory not found"
             exit 1
           fi
           
-          echo "Binaries verified successfully"
+          echo "Tailscale binaries verified successfully"
           
           # Start Tailscale service
           sudo "$TAILSCALED_PATH" &
@@ -141,11 +120,8 @@ jobs:
 
       - name: Display Connection Info
         run: |
-          # Use the full path to tailscale binary
-          TAILSCALE_PATH=$(find /Applications /usr/local -name "tailscale" -type f 2>/dev/null | head -1)
-          if [ -z "$TAILSCALE_PATH" ]; then
-            TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-          fi
+          # Use the same app bundle path
+          TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
           
           echo "=== Tailscale RDP Setup Complete ==="
           echo "Machine hostname: github-actions-mac-${GITHUB_RUN_ID}"
