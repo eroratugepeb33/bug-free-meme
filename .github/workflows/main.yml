@@ -1,7 +1,7 @@
 name: Tailscale RDP macOS Setup
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: 
     inputs:
       tailscale_auth_key:
         description: 'Tailscale Auth Key'
@@ -10,10 +10,10 @@ on:
       tailscale_tags:
         description: 'Tailscale Tags (comma separated)'
         required: false
-        default: 'tag:server'
+        default: 'tag: server'
         type: string
       enable_vnc:
-        description: 'Enable VNC access'
+        description:  'Enable VNC access'
         required: false
         default: false
         type: boolean
@@ -25,76 +25,38 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Tailscale via Homebrew Cask
+      - name: Install Tailscale via Homebrew
         run: |
-          # Since the .pkg redirects to Homebrew Cask, install directly via brew
-          echo "Installing Tailscale via Homebrew Cask..."
-          brew install --cask tailscale
+          echo "Installing Tailscale via Homebrew..."
+          brew install tailscale
           
           # Check installation
           echo "Checking installation..."
-          brew list --cask tailscale
-          ls -la /Applications/ | grep -i tailscale
+          brew list tailscale
           
-          # Verify binaries are accessible and show full paths
+          # Verify binaries are accessible
           echo "Tailscale binary location:"
           which tailscale
           echo "Tailscaled binary location:"
           which tailscaled
           
-          # Also check common installation paths
-          ls -la /opt/homebrew/bin/tailscale* 2>/dev/null || echo "Not in /opt/homebrew/bin"
-          ls -la /usr/local/bin/tailscale* 2>/dev/null || echo "Not in /usr/local/bin"
-          
-          # Export PATH for subsequent steps
-          echo "export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"" >> $GITHUB_ENV
-          
           # Wait for installation to complete
-          sleep 10
+          sleep 5
 
       - name: Configure Tailscale
-        run: |
-          # Check for both wrapper script and app bundle
-          echo "Checking for Tailscale installation..."
+        run:  |
+          # Verify binaries exist
+          TAILSCALE_PATH=$(which tailscale)
+          TAILSCALED_PATH=$(which tailscaled)
           
-          # Check if wrapper script exists (from Homebrew)
-          if [ -f "/opt/homebrew/bin/tailscale" ]; then
-            TAILSCALE_PATH="/opt/homebrew/bin/tailscale"
-            echo "Found Tailscale wrapper: $TAILSCALE_PATH"
-          elif [ -f "/usr/local/bin/tailscale" ]; then
-            TAILSCALE_PATH="/usr/local/bin/tailscale"
-            echo "Found Tailscale: $TAILSCALE_PATH"
-          elif [ -f "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]; then
-            TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-            echo "Found Tailscale app bundle: $TAILSCALE_PATH"
-          else
-            echo "ERROR: Tailscale binary not found"
+          if [ -z "$TAILSCALE_PATH" ] || [ -z "$TAILSCALED_PATH" ]; then
+            echo "ERROR: Tailscale binaries not found"
             echo "Searching for Tailscale..."
-            find /opt/homebrew /usr/local /Applications -name "tailscale" -type f 2>/dev/null
+            find /opt/homebrew /usr/local -name "tailscale*" -type f 2>/dev/null
             exit 1
           fi
           
-          # Check for tailscaled daemon
-          if [ -f "/opt/homebrew/bin/tailscaled" ]; then
-            TAILSCALED_PATH="/opt/homebrew/bin/tailscaled"
-            echo "Found tailscaled wrapper: $TAILSCALED_PATH"
-          elif [ -f "/usr/local/bin/tailscaled" ]; then
-            TAILSCALED_PATH="/usr/local/bin/tailscaled"
-            echo "Found tailscaled: $TAILSCALED_PATH"
-          elif [ -f "/Applications/Tailscale.app/Contents/MacOS/tailscaled" ]; then
-            TAILSCALED_PATH="/Applications/Tailscale.app/Contents/MacOS/tailscaled"
-            echo "Found tailscaled app bundle: $TAILSCALED_PATH"
-          elif [ -f "/usr/sbin/tailscaled" ]; then
-            TAILSCALED_PATH="/usr/sbin/tailscaled"
-            echo "Found system tailscaled: $TAILSCALED_PATH"
-          else
-            echo "ERROR: tailscaled binary not found"
-            echo "Searching for tailscaled..."
-            find /opt/homebrew /usr/local /Applications /usr/sbin -name "tailscaled" -type f 2>/dev/null
-            exit 1
-          fi
-          
-          echo "Using Tailscale: $TAILSCALE_PATH"
+          echo "Using Tailscale:  $TAILSCALE_PATH"
           echo "Using tailscaled: $TAILSCALED_PATH"
           echo "Tailscale binaries verified successfully"
           
@@ -133,30 +95,30 @@ jobs:
 
       - name: Configure Firewall
         if: ${{ inputs.enable_vnc }}
-        run: |
+        run:  |
           # Allow VNC through firewall
           sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
           sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /System/Library/CoreServices/RemoteManagement/ARDAgent.app
-          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /System/Library/CoreServices/RemoteManagement/ARDAgent.app
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /System/Library/CoreServices/RemoteManagement/ARDAgent. app
 
       - name: Display Connection Info
         run: |
-          # Use the same app bundle path
-          TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+          # Get the Tailscale binary path
+          TAILSCALE_PATH=$(which tailscale)
           
           echo "=== Tailscale RDP Setup Complete ==="
-          echo "Machine hostname: github-actions-mac-${GITHUB_RUN_ID}"
+          echo "Machine hostname:  github-actions-mac-${GITHUB_RUN_ID}"
           echo ""
           echo "Tailscale IP addresses:"
-          "$TAILSCALE_PATH" ip -4
-          "$TAILSCALE_PATH" ip -6
+          sudo "$TAILSCALE_PATH" ip -4
+          sudo "$TAILSCALE_PATH" ip -6
           echo ""
           echo "To connect via VNC:"
-          echo "1. Install a VNC client (RealVNC, TightVNC, etc.)"
+          echo "1. Install a VNC client (RealVNC, TightVNC, etc. )"
           echo "2. Connect to the Tailscale IP shown above"
           echo "3. Use password: githubactions123"
           echo ""
-          TAILSCALE_IP=$("$TAILSCALE_PATH" ip -4)
+          TAILSCALE_IP=$(sudo "$TAILSCALE_PATH" ip -4)
           echo "To connect via SSH:"
           echo "ssh $(whoami)@$TAILSCALE_IP"
           echo ""
