@@ -1,0 +1,113 @@
+name: Tailscale RDP macOS Setup
+
+on:
+  workflow_dispatch:
+    inputs:
+      tailscale_auth_key:
+        description: 'Tailscale Auth Key'
+        required: true
+        type: string
+      tailscale_tags:
+        description: 'Tailscale Tags (comma separated)'
+        required: false
+        default: 'tag:server'
+        type: string
+      enable_vnc:
+        description: 'Enable VNC access'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  setup-tailscale-rdp:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Tailscale
+        run: |
+          # Download the official Tailscale package
+          curl -L -o tailscale.pkg https://pkgs.tailscale.com/stable/Tailscale-latest-macos.pkg
+          
+          # Install the package
+          sudo installer -pkg tailscale.pkg -target /
+          
+          # Clean up
+          rm tailscale.pkg
+          
+          # Wait for installation to complete
+          sleep 10
+
+      - name: Configure Tailscale
+        run: |
+          # Start Tailscale service
+          sudo tailscaled &
+          
+          # Wait for daemon to start
+          sleep 5
+          
+          # Connect to Tailscale network
+          echo "${{ inputs.tailscale_auth_key }}" | sudo tailscale up \
+            --auth-key="$(cat)" \
+            --hostname="github-actions-mac-${GITHUB_RUN_ID}" \
+            --advertise-tags="${{ inputs.tailscale_tags }}" \
+            --accept-routes=true \
+            --accept-dns=true \
+            --ssh
+
+      - name: Enable Remote Desktop (Screen Sharing)
+        run: |
+          # Enable Screen Sharing (VNC/RDP equivalent on macOS)
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate \
+            -configure -access -on \
+            -configure -allowAccessFor -allUsers \
+            -configure -restart -agent
+            
+          # Set remote management access
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -clientopts -setvnclegacy -vnclegacy yes
+            
+          # Set VNC password (using a default password - change this for production)
+          echo "Setting VNC password"
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -clientopts -setvncpw -vncpw "githubactions123"
+
+      - name: Configure Firewall
+        if: ${{ inputs.enable_vnc }}
+        run: |
+          # Allow VNC through firewall
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --setglobalstate on
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /System/Library/CoreServices/RemoteManagement/ARDAgent.app
+          sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblockapp /System/Library/CoreServices/RemoteManagement/ARDAgent.app
+
+      - name: Display Connection Info
+        run: |
+          echo "=== Tailscale RDP Setup Complete ==="
+          echo "Machine hostname: github-actions-mac-${GITHUB_RUN_ID}"
+          echo ""
+          echo "Tailscale IP addresses:"
+          tailscale ip -4
+          tailscale ip -6
+          echo ""
+          echo "To connect via VNC:"
+          echo "1. Install a VNC client (RealVNC, TightVNC, etc.)"
+          echo "2. Connect to the Tailscale IP shown above"
+          echo "3. Use password: githubactions123"
+          echo ""
+          echo "To connect via SSH:"
+          echo "ssh $(whoami)@$(tailscale ip -4)"
+          echo ""
+          echo "Note: This runner will be available until the job completes."
+          echo "The workflow will timeout after 6 hours by default."
+
+      - name: Keep alive
+        run: |
+          # Keep the workflow running to maintain the connection
+          echo "Workflow will remain active for remote access..."
+          echo "Press Ctrl+C or wait for timeout to end session"
+          
+          # Sleep in background to keep workflow alive
+          sleep 21600 &  # 6 hours
+          wait
