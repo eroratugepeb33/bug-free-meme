@@ -54,27 +54,48 @@ jobs:
 
       - name: Configure Tailscale
         run: |
-          # Set the correct paths for Tailscale app bundle
-          TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
-          TAILSCALED_PATH="/Applications/Tailscale.app/Contents/MacOS/tailscaled"
+          # Check for both wrapper script and app bundle
+          echo "Checking for Tailscale installation..."
           
-          echo "Using Tailscale app bundle paths:"
-          echo "Tailscale: $TAILSCALE_PATH"
-          echo "Tailscaled: $TAILSCALED_PATH"
-          
-          # Verify the binaries exist
-          if [ ! -f "$TAILSCALE_PATH" ]; then
-            echo "ERROR: Tailscale binary not found at $TAILSCALE_PATH"
-            ls -la "/Applications/Tailscale.app/Contents/MacOS/" 2>/dev/null || echo "Tailscale app directory not found"
+          # Check if wrapper script exists (from Homebrew)
+          if [ -f "/opt/homebrew/bin/tailscale" ]; then
+            TAILSCALE_PATH="/opt/homebrew/bin/tailscale"
+            echo "Found Tailscale wrapper: $TAILSCALE_PATH"
+          elif [ -f "/usr/local/bin/tailscale" ]; then
+            TAILSCALE_PATH="/usr/local/bin/tailscale"
+            echo "Found Tailscale: $TAILSCALE_PATH"
+          elif [ -f "/Applications/Tailscale.app/Contents/MacOS/Tailscale" ]; then
+            TAILSCALE_PATH="/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+            echo "Found Tailscale app bundle: $TAILSCALE_PATH"
+          else
+            echo "ERROR: Tailscale binary not found"
+            echo "Searching for Tailscale..."
+            find /opt/homebrew /usr/local /Applications -name "tailscale" -type f 2>/dev/null
             exit 1
           fi
           
-          if [ ! -f "$TAILSCALED_PATH" ]; then
-            echo "ERROR: Tailscaled binary not found at $TAILSCALED_PATH"
-            ls -la "/Applications/Tailscale.app/Contents/MacOS/" 2>/dev/null || echo "Tailscale app directory not found"
+          # Check for tailscaled daemon
+          if [ -f "/opt/homebrew/bin/tailscaled" ]; then
+            TAILSCALED_PATH="/opt/homebrew/bin/tailscaled"
+            echo "Found tailscaled wrapper: $TAILSCALED_PATH"
+          elif [ -f "/usr/local/bin/tailscaled" ]; then
+            TAILSCALED_PATH="/usr/local/bin/tailscaled"
+            echo "Found tailscaled: $TAILSCALED_PATH"
+          elif [ -f "/Applications/Tailscale.app/Contents/MacOS/tailscaled" ]; then
+            TAILSCALED_PATH="/Applications/Tailscale.app/Contents/MacOS/tailscaled"
+            echo "Found tailscaled app bundle: $TAILSCALED_PATH"
+          elif [ -f "/usr/sbin/tailscaled" ]; then
+            TAILSCALED_PATH="/usr/sbin/tailscaled"
+            echo "Found system tailscaled: $TAILSCALED_PATH"
+          else
+            echo "ERROR: tailscaled binary not found"
+            echo "Searching for tailscaled..."
+            find /opt/homebrew /usr/local /Applications /usr/sbin -name "tailscaled" -type f 2>/dev/null
             exit 1
           fi
           
+          echo "Using Tailscale: $TAILSCALE_PATH"
+          echo "Using tailscaled: $TAILSCALED_PATH"
           echo "Tailscale binaries verified successfully"
           
           # Start Tailscale service
